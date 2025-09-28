@@ -78,17 +78,38 @@ export const supabaseHelpers = {
         throw new Error('No real Supabase credentials')
       }
       
-      const { data, error } = await supabase
+      // Map the alert data to match database schema
+      const insertData = {
+        type: alert.type,
+        location_text: alert.location_text,
+        latitude: alert.location_lat,
+        longitude: alert.location_lng,
+        location_lat: alert.location_lat,
+        location_lng: alert.location_lng,
+        source: alert.source,
+        confidence_score: alert.confidence_score || 0.5,
+        description: alert.description,
+        severity: alert.severity || 'medium',
+        status: alert.status || 'active'
+        // Note: affected_radius is not in the database schema, so we exclude it
+      }
+      
+      console.log('Attempting to insert alert with data:', insertData)
+      
+      // Use admin client to bypass RLS for alert creation 
+      const client = supabaseServiceRoleKey ? supabaseAdmin : supabase
+      const { data, error } = await client
         .from('alerts')
-        .insert([{
-          ...alert,
-          latitude: alert.location_lat,
-          longitude: alert.location_lng,
-        }])
+        .insert([insertData])
         .select()
         .single()
       
-      if (error) throw error
+      console.log('Supabase insert result:', { data, error })
+      
+      if (error) {
+        console.error('Supabase insert error details:', error)
+        throw error
+      }
       
       return {
         ...data,
@@ -178,6 +199,64 @@ export const supabaseHelpers = {
       console.log('Error getting citizen user ID, using fallback:', error)
       return 'b8d2b5c0-1234-4567-8901-123456789abc' // Default fallback UUID
     }
+  },
+
+  // Update alert status
+  async updateAlertStatus(id: string, status: Alert['status']): Promise<Alert> {
+    if (!hasRealSupabase()) {
+      throw new Error('Supabase not configured')
+    }
+
+    const client = supabaseServiceRoleKey ? supabaseAdmin : supabase
+    const { data, error } = await client
+      .from('alerts')
+      .update({ status })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error updating alert status:', error)
+      throw error
+    }
+
+    return data as Alert
+  },
+
+  // Delete alert
+  async deleteAlert(id: string): Promise<void> {
+    if (!hasRealSupabase()) {
+      throw new Error('Supabase not configured')
+    }
+
+    const client = supabaseServiceRoleKey ? supabaseAdmin : supabase
+    const { error } = await client
+      .from('alerts')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error deleting alert:', error)
+      throw error
+    }
+  },
+
+  // Delete report
+  async deleteReport(id: string): Promise<void> {
+    if (!hasRealSupabase()) {
+      throw new Error('Supabase not configured')
+    }
+
+    const client = supabaseServiceRoleKey ? supabaseAdmin : supabase
+    const { error } = await client
+      .from('reports')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error deleting report:', error)
+      throw error
+    }
   }
 }
 
@@ -185,12 +264,14 @@ export const supabaseHelpers = {
 export interface Alert {
   id: string
   type: 'fire' | 'flood' | 'outage' | 'storm' | 'shelter'
-  location_lat: number
-  location_lng: number
-  location_text: string
-  source: string
-  confidence_score: number
-  description: string
+  location_text?: string
+  latitude?: number
+  longitude?: number
+  location_lat?: number
+  location_lng?: number
+  source?: string
+  confidence_score?: number
+  description?: string
   created_at: string
   severity: 'low' | 'medium' | 'high' | 'critical'
   status: 'active' | 'resolved' | 'investigating'

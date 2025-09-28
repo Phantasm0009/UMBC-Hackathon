@@ -3,6 +3,7 @@ import { mockReports } from '@/lib/mockData'
 import { classifyData } from '@/lib/ai'
 import { supabaseHelpers } from '@/lib/supabase'
 import { tempReportStore } from '@/lib/tempReportStore'
+import { broadcastEvent } from '../events/route'
 
 // GET /api/reports - Return reports from Supabase if available, otherwise mock data
 export async function GET() {
@@ -85,6 +86,13 @@ export async function POST(request: NextRequest) {
       const newReport = await supabaseHelpers.insertReport(newReportData)
       console.log('Inserted report into Supabase:', newReport.id)
       
+      // Broadcast real-time event
+      broadcastEvent({
+        type: 'report-created',
+        data: newReport as unknown as Record<string, unknown>,
+        timestamp: new Date().toISOString()
+      })
+      
       return NextResponse.json({
         report: newReport,
         classification
@@ -101,6 +109,13 @@ export async function POST(request: NextRequest) {
       // Add to temporary store so it shows up in admin panel
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       tempReportStore.addReport(mockReport as unknown as any)
+      
+      // Broadcast real-time event even for mock data
+      broadcastEvent({
+        type: 'report-created',
+        data: mockReport as unknown as Record<string, unknown>,
+        timestamp: new Date().toISOString()
+      })
       
       return NextResponse.json({
         report: mockReport,

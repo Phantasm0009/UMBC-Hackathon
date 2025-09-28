@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseHelpers } from '@/lib/supabase'
 import { tempReportStore } from '@/lib/tempReportStore'
+import { broadcastEvent } from '../../events/route'
 
 // PUT /api/reports/[id] - Update a specific report's status
 export async function PUT(
@@ -38,6 +39,13 @@ export async function PUT(
       const updatedReport = await supabaseHelpers.updateReportStatus(id, status, severity)
       console.log(`Updated report ${id} status to ${status}${severity ? ` with severity ${severity}` : ''} in Supabase`)
       
+      // Broadcast real-time event
+      broadcastEvent({
+        type: 'report-updated',
+        data: updatedReport as unknown as Record<string, unknown>,
+        timestamp: new Date().toISOString()
+      })
+      
       return NextResponse.json({ report: updatedReport })
     } catch (supabaseError) {
       console.log('Supabase not available, updating in temp store:', supabaseError)
@@ -58,6 +66,50 @@ export async function PUT(
     console.error('Error updating report status:', error)
     return NextResponse.json(
       { error: 'Failed to update report status' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/reports/[id] - Delete a specific report
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Missing report ID' },
+        { status: 400 }
+      )
+    }
+
+    // Try to delete from Supabase first
+    try {
+      await supabaseHelpers.deleteReport(id)
+      console.log(`Deleted report ${id} from Supabase`)
+      
+      // Broadcast real-time event
+      broadcastEvent({
+        type: 'report-deleted',
+        data: { id },
+        timestamp: new Date().toISOString()
+      })
+      
+      return NextResponse.json({ success: true, message: 'Report deleted successfully' })
+    } catch (supabaseError) {
+      console.log('Supabase not available, delete failed:', supabaseError)
+      return NextResponse.json(
+        { error: 'Failed to delete report from database' },
+        { status: 500 }
+      )
+    }
+  } catch (error) {
+    console.error('Error deleting report:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete report' },
       { status: 500 }
     )
   }

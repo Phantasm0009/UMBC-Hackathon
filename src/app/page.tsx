@@ -11,13 +11,14 @@ import { ReportCard } from '@/components/ReportCard'
 import { Navigation, MobileNavigation } from '@/components/Navigation'
 import { EmergencyModeTest } from '@/components/EmergencyModeTest'
 import { useEmergencyMode } from '@/hooks/useEmergencyMode'
+import { useRealtimeData } from '@/hooks/useRealtimeData'
 import { Menu, X, Filter, DisasterIcon, getDisasterColor } from '@/components/Icons'
 import { formatDistanceToNow } from 'date-fns'
 
 export default function DashboardPage() {
-  // State management
-  const [alerts, setAlerts] = useState<Alert[]>([])
-  const [reports, setReports] = useState<Report[]>([])
+  // Use real-time data hook instead of manual data loading
+  const { alerts, reports, isConnected, connectionError, reconnect, loading } = useRealtimeData()
+  
   const [filters, setFilters] = useState({
     fire: true,
     flood: true,
@@ -28,73 +29,11 @@ export default function DashboardPage() {
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null)
   const [selectedReport, setSelectedReport] = useState<Report | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false) // Start closed on mobile
-  const [loading, setLoading] = useState(true)
 
   // Emergency mode for mobile
   const {
     checkEmergencyStatus
   } = useEmergencyMode()
-
-  // Load data from API (which handles Supabase fallback to mock data)
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true)
-      try {
-        // Load alerts
-        const alertsResponse = await fetch('/api/alerts')
-        if (alertsResponse.ok) {
-          const alertsData = await alertsResponse.json()
-          setAlerts(alertsData)
-        }
-
-        // Load reports
-        const reportsResponse = await fetch('/api/reports')
-        if (reportsResponse.ok) {
-          const reportsData = await reportsResponse.json()
-          setReports(reportsData)
-        }
-      } catch (error) {
-        console.error('Error loading data:', error)
-        // Fallback to mock data
-        const { mockAlerts, mockReports } = await import('@/lib/mockData')
-        setAlerts(mockAlerts)
-        setReports(mockReports)
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadData()
-  }, [])
-
-  // Real-time updates for emergency mode
-  useEffect(() => {
-    const pollInterval = setInterval(async () => {
-      try {
-        // Fetch latest data
-        const [alertsResponse, reportsResponse] = await Promise.all([
-          fetch('/api/alerts'),
-          fetch('/api/reports')
-        ])
-        
-        if (alertsResponse.ok && reportsResponse.ok) {
-          const [alertsData, reportsData] = await Promise.all([
-            alertsResponse.json(),
-            reportsResponse.json()
-          ])
-          
-          setAlerts(alertsData)
-          setReports(reportsData)
-          
-          // Check for emergency status
-          checkEmergencyStatus(alertsData, reportsData)
-        }
-      } catch (error) {
-        console.error('Error polling for updates:', error)
-      }
-    }, 30000) // Poll every 30 seconds for real-time updates
-
-    return () => clearInterval(pollInterval)
-  }, [checkEmergencyStatus])
 
   // Check emergency status when data changes
   useEffect(() => {
@@ -159,11 +98,7 @@ export default function DashboardPage() {
           body: JSON.stringify({ status: 'approved', severity: 'critical' })
         })
         
-        // Refresh data
-        const reportsResponse = await fetch('/api/reports')
-        if (reportsResponse.ok) {
-          setReports(await reportsResponse.json())
-        }
+        // Real-time system will handle the update automatically
       }
     } catch (error) {
       console.error('Error creating test incident:', error)
@@ -197,11 +132,7 @@ export default function DashboardPage() {
           body: JSON.stringify({ status: 'approved', severity: 'high' })
         })
         
-        // Refresh data
-        const reportsResponse = await fetch('/api/reports')
-        if (reportsResponse.ok) {
-          setReports(await reportsResponse.json())
-        }
+        // Real-time system will handle the update automatically
       }
     } catch (error) {
       console.error('Error creating test incident:', error)
@@ -245,7 +176,26 @@ export default function DashboardPage() {
             </button>
             <div>
               <h1 className="text-xl lg:text-2xl font-bold text-red-600">DisasterLens</h1>
-              <p className="text-xs lg:text-sm text-gray-600 hidden sm:block">Real-time Emergency Response Dashboard</p>
+              <div className="flex items-center space-x-2">
+                <p className="text-xs lg:text-sm text-gray-600 hidden sm:block">Real-time Emergency Response Dashboard</p>
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                  isConnected 
+                    ? 'bg-green-50 text-green-700' 
+                    : connectionError 
+                      ? 'bg-red-50 text-red-700' 
+                      : 'bg-yellow-50 text-yellow-700'
+                }`}>
+                  {isConnected ? '🟢 Live' : connectionError ? '🔴 Offline' : '🟡 Connecting'}
+                </span>
+                {connectionError && (
+                  <button
+                    onClick={reconnect}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Reconnect
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           

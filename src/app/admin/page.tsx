@@ -1,21 +1,28 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Alert, Report } from '@/lib/supabase'
+import { useState } from 'react'
+import { Alert } from '@/lib/supabase'
 import { AlertCard } from '@/components/AlertCard'
-import { DisasterIcon, CheckCircle, X, Plus, MapPin } from '@/components/Icons'
+import { DisasterIcon, CheckCircle, X, Plus, MapPin, Trash2 } from '@/components/Icons'
 import { LocationAutocomplete } from '@/components/LocationAutocomplete'
+import { AdminPasswordGate } from '@/components/AdminPasswordGate'
 import { formatDistanceToNow } from 'date-fns'
 import { classifyData } from '@/lib/ai'
+import { useRealtimeData } from '@/hooks/useRealtimeData'
 import Link from 'next/link'
 
 export default function AdminPage() {
-  const [alerts, setAlerts] = useState<Alert[]>([])
-  const [reports, setReports] = useState<Report[]>([])
-  const [loading, setLoading] = useState(true)
+  // Use real-time data hook
+  const { alerts, reports, isConnected, connectionError, reconnect, loading } = useRealtimeData()
+  const [updatingAlert, setUpdatingAlert] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'reports' | 'alerts' | 'create'>('reports')
   const [approvingReport, setApprovingReport] = useState<string | null>(null)
-  const [selectedSeverity, setSelectedSeverity] = useState<'low' | 'medium' | 'high'>('medium')
+  const [classifying, setClassifying] = useState(false)
+  const [aiClassification, setAiClassification] = useState<{
+    severity: 'low' | 'medium' | 'high' | 'critical'
+    confidence: number
+    summary: string
+  } | null>(null)
   
   // Admin incident creation state
   const [creatingIncident, setCreatingIncident] = useState(false)
@@ -27,43 +34,63 @@ export default function AdminPage() {
     userLocation: null as { lat: number, lng: number } | null
   })
 
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true)
+  const handleReportAction = async (reportId: string, action: 'approve' | 'reject') => {
+    if (action === 'reject') {
+      // For rejection, process immediately
+      const newStatus = 'rejected'
+      
       try {
-        // Load alerts from API
-        const alertsResponse = await fetch('/api/alerts')
-        if (alertsResponse.ok) {
-          const alertsData = await alertsResponse.json()
-          setAlerts(alertsData)
-        }
+        const response = await fetch(`/api/reports/${reportId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: newStatus })
+        })
 
-        // Load reports from API    
-        const reportsResponse = await fetch('/api/reports')
-        if (reportsResponse.ok) {
-          const reportsData = await reportsResponse.json()
-          setReports(reportsData)
+        if (response.ok) {
+          console.log(`Successfully rejected report ${reportId}`)
+          // Real-time system will handle the update automatically
+          setApprovingReport(null)
+        } else {
+          alert('Failed to reject report. Please try again.')
         }
       } catch (error) {
-        console.error('Error loading data:', error)
-        // Fallback to mock data
-        const { mockAlerts, mockReports } = await import('@/lib/mockData')
-        setAlerts(mockAlerts)
-        setReports(mockReports)
-      } finally {
-        setLoading(false)
+        console.error('Error rejecting report:', error)
+        alert('Failed to reject report. Please try again.')
       }
+      return
     }
-    loadData()
-  }, [])
+    
+    // For approval, first get AI classification
+    if (!aiClassification) {
+      setClassifying(true)
+      try {
+        const report = reports.find(r => r.id === reportId)
+        if (report && report.text_report) {
+          const classification = await classifyData(report.text_report, report.image_url || undefined)
+          setAiClassification({
+            severity: classification.severity,
+            confidence: classification.confidence,
+            summary: classification.summary
+          })
+        }
+      } catch (error) {
+        console.error('Error classifying report:', error)
+        alert('Failed to classify report. Please try again.')
+      } finally {
+        setClassifying(false)
+      }
+      return
+    }
 
-  const handleReportAction = async (reportId: string, action: 'approve' | 'reject', severity?: 'low' | 'medium' | 'high') => {
-    const newStatus = action === 'approve' ? 'approved' : 'rejected'
+    // If we have AI classification, proceed with approval
+    const newStatus = 'approved'
+    const severity = aiClassification.severity
     
     try {
-      // Update status via API to ensure persistence
       const requestBody: { status: string; severity?: string } = { status: newStatus }
-      if (action === 'approve' && severity) {
+      if (severity) {
         requestBody.severity = severity
       }
       
@@ -76,16 +103,13 @@ export default function AdminPage() {
       })
 
       if (response.ok) {
-        // Update local state only after successful API call
-        setReports(prev => prev.map(report => 
-          report.id === reportId 
-            ? { ...report, status: newStatus, ...(severity && { severity }) }
-            : report
-        ))
-        console.log(`Successfully updated report ${reportId} status to ${newStatus}${severity ? ` with severity ${severity}` : ''}`)
+        console.log(`Successfully updated report ${reportId} status to ${newStatus} with AI-determined severity ${severity}`)
         
-        // Close approval modal
+        // Real-time system will handle the update automatically
+        
+        // Close modal and reset classification
         setApprovingReport(null)
+        setAiClassification(null)
       } else {
         console.error('Failed to update report status:', await response.text())
         alert('Failed to update report status. Please try again.')
@@ -96,12 +120,78 @@ export default function AdminPage() {
     }
   }
 
-  const handleAlertStatusChange = (alertId: string, status: Alert['status']) => {
-    setAlerts(prev => prev.map(alert => 
-      alert.id === alertId 
-        ? { ...alert, status }
-        : alert
-    ))
+  const handleAlertStatusChange = async (alertId: string, status: Alert['status']) => {
+    setUpdatingAlert(alertId)
+    try {
+      const response = await fetch(`/api/alerts/${alertId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status })
+      })
+
+      if (response.ok) {
+        console.log(`Successfully updated alert ${alertId} status to ${status}`)
+        // Real-time system will handle the update automatically
+      } else {
+        console.error('Failed to update alert status:', await response.text())
+        alert('Failed to update alert status. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error updating alert status:', error)
+      alert('Failed to update alert status. Please try again.')
+    } finally {
+      setUpdatingAlert(null)
+    }
+  }
+
+  // Handle alert deletion
+  const handleDeleteAlert = async (alertId: string) => {
+    if (!confirm('Are you sure you want to delete this alert? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/alerts/${alertId}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        console.log(`Successfully deleted alert ${alertId}`)
+        // Real-time system will handle the update automatically
+      } else {
+        console.error('Failed to delete alert:', await response.text())
+        alert('Failed to delete alert. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error deleting alert:', error)
+      alert('Failed to delete alert. Please try again.')
+    }
+  }
+
+  // Handle report deletion
+  const handleDeleteReport = async (reportId: string) => {
+    if (!confirm('Are you sure you want to delete this report? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/reports/${reportId}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        console.log(`Successfully deleted report ${reportId}`)
+        // Real-time system will handle the update automatically
+      } else {
+        console.error('Failed to delete report:', await response.text())
+        alert('Failed to delete report. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error deleting report:', error)
+      alert('Failed to delete report. Please try again.')
+    }
   }
 
   // Handle admin incident creation
@@ -150,12 +240,7 @@ export default function AdminPage() {
           })
           
           if (updateResponse.ok) {
-            // Refresh reports list
-            const reportsResponse = await fetch('/api/reports')
-            if (reportsResponse.ok) {
-              const reportsData = await reportsResponse.json()
-              setReports(reportsData)
-            }
+            // Real-time system will handle the update automatically
             
             // Reset form
             setAdminIncidentForm({
@@ -198,15 +283,37 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <AdminPasswordGate onAuthenticated={() => {}}>
+      <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b-2 border-gray-200 px-4 py-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-red-600">DisasterLens Admin</h1>
-            <p className="text-sm text-gray-600">Emergency Response Management</p>
+            <div className="flex items-center space-x-2">
+              <p className="text-sm text-gray-600">Emergency Response Management</p>
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                isConnected 
+                  ? 'bg-green-50 text-green-700' 
+                  : connectionError 
+                    ? 'bg-red-50 text-red-700' 
+                    : 'bg-yellow-50 text-yellow-700'
+              }`}>
+                {isConnected ? '🟢 Real-time Active' : connectionError ? '🔴 Connection Lost' : '🟡 Connecting'}
+              </span>
+              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                📊 Live Data: {alerts.length} alerts, {reports.length} reports
+              </span>
+            </div>
           </div>
           <div className="flex items-center space-x-4">
+            <button
+              onClick={reconnect}
+              disabled={loading}
+              className="px-3 py-1 text-sm font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Connecting...' : isConnected ? '✅ Real-time Active' : '🔄 Reconnect'}
+            </button>
             <Link 
               href="/report"
               className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors duration-200"
@@ -332,6 +439,13 @@ export default function AdminPage() {
                               >
                                 <X size={16} />
                               </button>
+                              <button
+                                onClick={() => handleDeleteReport(report.id)}
+                                className="p-2 bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-600 rounded-lg transition-colors duration-200"
+                                title="Delete Report"
+                              >
+                                <Trash2 size={16} />
+                              </button>
                             </div>
                           </div>
                           
@@ -357,21 +471,30 @@ export default function AdminPage() {
                   <div className="space-y-2">
                     {processedReports.slice(0, 10).map((report) => (
                       <div key={report.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-3 flex-1">
                           <div className={`w-3 h-3 rounded-full ${
                             report.status === 'approved' ? 'bg-green-500' : 'bg-red-500'
                           }`}></div>
-                          <span className="text-sm text-gray-700 line-clamp-1">
+                          <span className="text-sm text-gray-700 line-clamp-1 flex-1">
                             {report.text_report}
                           </span>
                         </div>
-                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                          report.status === 'approved' 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-red-100 text-red-700'
-                        }`}>
-                          {report.status.toUpperCase()}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                            report.status === 'approved' 
+                              ? 'bg-green-100 text-green-700' 
+                              : 'bg-red-100 text-red-700'
+                          }`}>
+                            {report.status.toUpperCase()}
+                          </span>
+                          <button
+                            onClick={() => handleDeleteReport(report.id)}
+                            className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors duration-200"
+                            title="Delete Report"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -387,33 +510,43 @@ export default function AdminPage() {
                       <div className="flex space-x-2">
                         <button
                           onClick={() => handleAlertStatusChange(alert.id, 'active')}
-                          className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
+                          disabled={updatingAlert === alert.id}
+                          className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                             alert.status === 'active'
                               ? 'bg-red-600 text-white'
                               : 'bg-red-100 text-red-600 hover:bg-red-200'
                           }`}
                         >
-                          Active
+                          {updatingAlert === alert.id ? 'Updating...' : 'Active'}
                         </button>
                         <button
                           onClick={() => handleAlertStatusChange(alert.id, 'investigating')}
-                          className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
+                          disabled={updatingAlert === alert.id}
+                          className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                             alert.status === 'investigating'
                               ? 'bg-yellow-600 text-white'
                               : 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200'
                           }`}
                         >
-                          Investigating
+                          {updatingAlert === alert.id ? 'Updating...' : 'Investigating'}
                         </button>
                         <button
                           onClick={() => handleAlertStatusChange(alert.id, 'resolved')}
-                          className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200 ${
+                          disabled={updatingAlert === alert.id}
+                          className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                             alert.status === 'resolved'
                               ? 'bg-green-600 text-white'
                               : 'bg-green-100 text-green-600 hover:bg-green-200'
                           }`}
                         >
-                          Resolved
+                          {updatingAlert === alert.id ? 'Updating...' : 'Resolved'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteAlert(alert.id)}
+                          className="px-3 py-2 bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-600 rounded-lg transition-colors duration-200"
+                          title="Delete Alert"
+                        >
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </div>
@@ -565,20 +698,26 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Severity Selection Modal */}
+      {/* AI Classification Confirmation Modal */}
       {approvingReport && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setApprovingReport(null)}
+          onClick={() => {
+            setApprovingReport(null)
+            setAiClassification(null)
+          }}
         >
           <div 
             className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">Set Emergency Severity</h3>
+              <h3 className="text-xl font-bold text-gray-900">AI Classification & Approval</h3>
               <button
-                onClick={() => setApprovingReport(null)}
+                onClick={() => {
+                  setApprovingReport(null)
+                  setAiClassification(null)
+                }}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200"
               >
                 <X size={20} />
@@ -586,56 +725,97 @@ export default function AdminPage() {
             </div>
             
             <div className="space-y-4 mb-6">
-              <p className="text-gray-700">Choose the severity level for this approved report:</p>
-              
-              <div className="space-y-3">
-                {[
-                  { value: 'low', label: 'Low Priority', color: 'bg-gray-100 text-gray-800 border-gray-300', description: 'Minor issues, non-urgent' },
-                  { value: 'medium', label: 'Medium Priority', color: 'bg-yellow-100 text-yellow-800 border-yellow-300', description: 'Moderate concern, requires attention' },
-                  { value: 'high', label: 'High Priority', color: 'bg-red-100 text-red-800 border-red-300', description: 'Serious threat, immediate response needed' }
-                ].map((option) => (
-                  <label
-                    key={option.value}
-                    className={`flex items-start space-x-3 p-3 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                      selectedSeverity === option.value 
-                        ? `${option.color} border-opacity-100` 
-                        : 'bg-white border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="severity"
-                      value={option.value}
-                      checked={selectedSeverity === option.value}
-                      onChange={(e) => setSelectedSeverity(e.target.value as 'low' | 'medium' | 'high')}
-                      className="mt-1"
-                    />
-                    <div>
-                      <div className="font-semibold text-gray-900">{option.label}</div>
-                      <div className="text-sm text-gray-600">{option.description}</div>
+              {!aiClassification ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <div className="w-4 h-4 bg-blue-600 rounded-full flex-shrink-0 flex items-center justify-center">
+                      <div className="w-2 h-2 bg-white rounded-full"></div>
                     </div>
-                  </label>
-                ))}
-              </div>
+                    <h4 className="font-semibold text-blue-900">AI-Powered Classification</h4>
+                  </div>
+                  <p className="text-blue-800 text-sm">
+                    Our AI will automatically analyze the report content and assign the appropriate severity level based on:
+                  </p>
+                  <ul className="text-blue-700 text-xs mt-2 space-y-1 ml-4">
+                    <li>• Emergency keywords and urgency indicators</li>
+                    <li>• Scale and scope of the incident</li>
+                    <li>• Human impact and safety concerns</li>
+                    <li>• Geographic and contextual factors</li>
+                  </ul>
+                </div>
+              ) : (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <CheckCircle className="text-green-600" size={20} />
+                    <h4 className="font-semibold text-green-900">AI Classification Complete</h4>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">Severity Level:</span>
+                      <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                        aiClassification.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                        aiClassification.severity === 'high' ? 'bg-orange-100 text-orange-800' :
+                        aiClassification.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {aiClassification.severity.toUpperCase()}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">AI Confidence:</span>
+                      <span className="text-sm font-bold text-green-700">
+                        {Math.round(aiClassification.confidence * 100)}%
+                      </span>
+                    </div>
+                    
+                    <div className="pt-2 border-t border-green-200">
+                      <p className="text-sm text-green-800">{aiClassification.summary}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {classifying && (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                  <p className="text-sm text-gray-600">AI is analyzing report content...</p>
+                </div>
+              )}
             </div>
             
             <div className="flex space-x-3">
               <button
-                onClick={() => setApprovingReport(null)}
+                onClick={() => {
+                  setApprovingReport(null)
+                  setAiClassification(null)
+                }}
                 className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors duration-200"
               >
                 Cancel
               </button>
-              <button
-                onClick={() => handleReportAction(approvingReport, 'approve', selectedSeverity)}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200"
-              >
-                Approve with {selectedSeverity.charAt(0).toUpperCase() + selectedSeverity.slice(1)} Priority
-              </button>
+              {!aiClassification ? (
+                <button
+                  onClick={() => handleReportAction(approvingReport, 'approve')}
+                  disabled={classifying}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {classifying ? 'Analyzing...' : 'Analyze with AI'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleReportAction(approvingReport, 'approve')}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200"
+                >
+                  Approve as {aiClassification.severity.toUpperCase()}
+                </button>
+              )}
             </div>
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </AdminPasswordGate>
   )
 }

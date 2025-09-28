@@ -178,7 +178,7 @@ export const SummaryPanel = ({ alerts, reports = [], className = '' }: SummaryPa
                 <div className="flex items-center space-x-2 mt-1">
                   <span className="text-xs text-gray-500">{alert.location_text}</span>
                   <span className="text-xs text-gray-400">•</span>
-                  <span className="text-xs text-gray-500">{Math.round(alert.confidence_score * 100)}%</span>
+                  <span className="text-xs text-gray-500">{Math.round((alert.confidence_score || 0) * 100)}%</span>
                 </div>
               </div>
             </div>

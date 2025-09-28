@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { mockAlerts } from '@/lib/mockData'
 import { supabaseHelpers } from '@/lib/supabase'
+import { broadcastEvent } from '../events/route'
 
 // GET /api/alerts - Return alerts from Supabase if available, otherwise mock data
 export async function GET() {
@@ -37,6 +38,14 @@ export async function POST(request: NextRequest) {
         created_at: new Date().toISOString()
       })
       console.log('Inserted alert into Supabase:', newAlert.id)
+      
+      // Broadcast real-time event
+      broadcastEvent({
+        type: 'alert-created',
+        data: newAlert as unknown as Record<string, unknown>,
+        timestamp: new Date().toISOString()
+      })
+      
       return NextResponse.json(newAlert, { status: 201 })
     } catch (supabaseError) {
       console.log('Supabase not available, returning mock alert:', supabaseError)
@@ -46,6 +55,14 @@ export async function POST(request: NextRequest) {
         ...alertData,
         created_at: new Date().toISOString()
       }
+      
+      // Broadcast real-time event even for mock data
+      broadcastEvent({
+        type: 'alert-created',
+        data: mockAlert as unknown as Record<string, unknown>,
+        timestamp: new Date().toISOString()
+      })
+      
       return NextResponse.json(mockAlert, { status: 201 })
     }
   } catch (error) {

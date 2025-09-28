@@ -15,7 +15,8 @@ import {
   Menu,
   Bell,
   Eye,
-  EyeOff
+  EyeOff,
+  Trash2
 } from 'lucide-react'
 
 interface DisasterIconProps {
@@ -55,7 +56,8 @@ export {
   Menu,
   Bell,
   Eye,
-  EyeOff
+  EyeOff,
+  Trash2
 }
 
 // Utility function to get disaster colors

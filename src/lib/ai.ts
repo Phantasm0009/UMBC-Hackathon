@@ -126,72 +126,104 @@ export async function classifyData(text: string, imageUrl?: string): Promise<Cla
     confidence = Math.min(0.98, confidence + 0.15)
   }
   
-  // AI-driven severity determination based on multiple factors
+  // AI-driven severity determination based on description content analysis
   let severityScore = 0
   
-  // Base severity scoring by disaster type (AI learns patterns)
-  const typeSeverityBase = {
-    fire: 7,      // Fire is inherently dangerous
-    flood: 5,     // Moderate base threat
-    storm: 6,     // Weather can escalate quickly  
-    outage: 3,    // Usually infrastructure issue
-    shelter: 4    // Human displacement concern
+  // PRIMARY: Description content severity indicators (most important)
+  const severityIndicators = {
+    critical: ['critical', 'emergency', 'urgent', 'immediate', 'life threatening', 'death', 'deaths', 'fatalities', 'casualties', 'massive', 'catastrophic', 'devastating', 'destruction', 'collapsed', 'explosion', 'evacuate immediately', 'trapped', 'screaming', 'help', 'rescue', 'spreading rapidly', 'out of control', 'major', 'severe', 'extreme', 'dangerous', 'threat', 'serious'],
+    high: ['important', 'significant', 'injured', 'injuries', 'damage', 'affected', 'multiple', 'many people', 'evacuate', 'evacuating', 'blocked', 'closed', 'impassable', 'rising', 'worsening', 'growing', 'expanding', 'active', 'happening', 'currently', 'ongoing', 'now', 'right now'],
+    medium: ['concern', 'issue', 'problem', 'moderate', 'some', 'disruption', 'limited', 'localized', 'area', 'neighborhood', 'warning', 'alert', 'notice'],
+    low: ['minor', 'small', 'contained', 'controlled', 'resolved', 'cleared', 'fixed', 'repaired', 'restored', 'normal', 'routine', 'scheduled', 'planned', 'maintenance', 'test', 'drill', 'false alarm']
   }
   
-  severityScore += typeSeverityBase[bestCategory] || 3
+  // Score based on description content (primary factor) - INCREASED WEIGHTS
+  const criticalTerms = severityIndicators.critical.filter(term => lowerText.includes(term))
+  const highTerms = severityIndicators.high.filter(term => lowerText.includes(term))
+  const mediumTerms = severityIndicators.medium.filter(term => lowerText.includes(term))
+  const lowTerms = severityIndicators.low.filter(term => lowerText.includes(term))
   
-  // Critical urgency indicators (AI detects emergency language)
-  const criticalTerms = ['911', 'emergency', 'help', 'urgent', 'critical', 'severe', 'major', 'massive', 'catastrophic', 'disaster', 'crisis', 'life threatening', 'dangerous', 'trapped', 'casualties', 'injured', 'fatalities', 'death']
-  const criticalCount = criticalTerms.filter(term => lowerText.includes(term)).length
-  severityScore += criticalCount * 2.5
+  // Weight description content heavily - ADJUSTED WEIGHTS
+  severityScore += criticalTerms.length * 6    // Critical terms = +6 each (increased from 4)
+  severityScore += highTerms.length * 3        // High terms = +3 each (increased from 2.5)  
+  severityScore += mediumTerms.length * 1.5    // Medium terms = +1.5 each (increased from 1)
+  severityScore -= lowTerms.length * 4         // Low terms = -4 each (increased penalty)
   
-  // High impact indicators (AI recognizes escalation factors)
-  const highImpactTerms = ['widespread', 'multiple', 'large', 'huge', 'massive', 'extensive', 'spreading', 'growing', 'escalating', 'worsening', 'overwhelming', 'out of control', 'cannot contain']
-  const highImpactCount = highImpactTerms.filter(term => lowerText.includes(term)).length
-  severityScore += highImpactCount * 1.8
+  // EMERGENCY KEYWORDS BOOST - Major boost for immediate response terms
+  const emergencyKeywords = ['emergency', 'urgent', 'immediate', 'help', 'rescue', 'critical', 'danger', 'threat']
+  const emergencyCount = emergencyKeywords.filter(term => lowerText.includes(term)).length
+  severityScore += emergencyCount * 4 // Major boost for emergency language
   
-  // Immediate threat indicators (AI detects time-sensitive language)
-  const immediateTerms = ['now', 'immediate', 'right now', 'happening now', 'currently', 'active', 'ongoing', 'in progress', 'spreading fast', 'rapidly']
-  const immediateCount = immediateTerms.filter(term => lowerText.includes(term)).length
-  severityScore += immediateCount * 1.5
+  // Text urgency analysis
+  const sentences = text.split(/[.!?]/).filter(s => s.trim().length > 0)
+  const avgSentenceLength = sentences.length > 0 ? sentences.reduce((acc, s) => acc + s.length, 0) / sentences.length : 0
   
-  // Human impact indicators (AI prioritizes human safety)
-  const humanImpactTerms = ['people', 'residents', 'families', 'children', 'elderly', 'hospital', 'school', 'apartment', 'neighborhood', 'community', 'evacuation', 'rescue needed']
-  const humanImpactCount = humanImpactTerms.filter(term => lowerText.includes(term)).length
-  severityScore += humanImpactCount * 1.3
+  // Shorter, more urgent sentences often indicate higher severity
+  if (avgSentenceLength < 50 && sentences.length > 1) {
+    severityScore += 2 // Urgent, fragmented communication
+  }
   
-  // Infrastructure impact indicators (AI assesses system-wide effects)
-  const infraTerms = ['power grid', 'water system', 'transportation', 'communication', 'hospital', 'emergency services', 'bridge', 'highway', 'airport', 'subway', 'train']
-  const infraCount = infraTerms.filter(term => lowerText.includes(term)).length
-  severityScore += infraCount * 1.2
+  // Exclamation marks and caps indicate urgency
+  const exclamationCount = (text.match(/!/g) || []).length
+  const capsWordsCount = (text.match(/\b[A-Z]{2,}\b/g) || []).length
   
-  // Reduction factors for minor incidents (AI recognizes contained situations)
-  const minorTerms = ['minor', 'small', 'slight', 'little', 'light', 'mild', 'contained', 'under control', 'resolved', 'handled', 'managed', 'no injuries', 'no damage']
-  const minorCount = minorTerms.filter(term => lowerText.includes(term)).length
-  severityScore -= minorCount * 2
+  severityScore += Math.min(exclamationCount * 0.5, 2) // Max +2 for exclamations
+  severityScore += Math.min(capsWordsCount * 0.3, 1.5) // Max +1.5 for caps
   
-  // Keyword strength bonus (AI considers classification confidence)
-  severityScore += (maxScore / 3)
+  // Numbers indicating scale/impact
+  const numberMatches = text.match(/\b\d+\b/g) || []
+  const hasLargeNumbers = numberMatches.some(n => parseInt(n) > 100)
+  if (hasLargeNumbers) {
+    severityScore += 1.5 // Large numbers suggest scale
+  }
+  
+  // Time-sensitive language
+  const timeUrgency = ['now', 'immediately', 'right now', 'happening', 'currently', 'active', 'ongoing']
+  const urgentTimeCount = timeUrgency.filter(term => lowerText.includes(term)).length
+  severityScore += urgentTimeCount * 2 // Increased from 1.2
+  
+  // SECONDARY: Category consideration with better weights
+  const categoryBonus = {
+    fire: 2,      // Fire gets higher bonus (was 1)
+    flood: 2,     // Flood gets higher bonus (was 1)  
+    storm: 1,     // Storm gets modest bonus (was 0.5)
+    outage: 0.5,  // Outage small bonus (was 0)
+    shelter: 1    // Shelter gets small bonus (was 0)
+  }
+  severityScore += categoryBonus[bestCategory] || 0
   
   // Image analysis bonus (AI trusts visual confirmation)
   if (imageUrl) {
-    severityScore += 1.5
+    severityScore += 2 // Increased from 1.5
   }
-  
-  // AI determines final severity based on calculated score
+
+  // AI determines final severity based on calculated score - LOWERED THRESHOLDS
   let severity: Alert['severity']
-  if (severityScore >= 12) {
+  if (severityScore >= 8) {      // Lowered from 12
     severity = 'critical'
-  } else if (severityScore >= 8) {
+  } else if (severityScore >= 5) { // Lowered from 8
     severity = 'high'  
-  } else if (severityScore >= 4) {
+  } else if (severityScore >= 2) { // Lowered from 4
     severity = 'medium'
   } else {
     severity = 'low'
   }
   
-  // AI safety override: Fire with any emergency language becomes critical
-  if (bestCategory === 'fire' && criticalCount > 0) {
+  // Debug logging for severity scoring
+  console.log('🤖 AI Classification Debug:', {
+    text: text.substring(0, 100) + '...',
+    criticalTermsFound: criticalTerms,
+    highTermsFound: highTerms.slice(0, 3), // Show first 3
+    emergencyCount,
+    urgentTimeCount,
+    category: bestCategory,
+    categoryBonus: categoryBonus[bestCategory],
+    finalScore: severityScore,
+    assignedSeverity: severity
+  })
+  
+  // AI safety override: Fire with critical terms becomes critical
+  if (bestCategory === 'fire' && criticalTerms.length > 0) {
     severity = 'critical'
   }
   
@@ -201,20 +233,63 @@ export async function classifyData(text: string, imageUrl?: string): Promise<Cla
     if (severity === 'high') severity = 'critical'
   }
   
-  // Generate detailed summary
+  // Generate detailed summary that matches the severity level
   const generateSummary = (type: Alert['type'], confidence: number, severity: Alert['severity']) => {
     const confidencePercent = Math.round(confidence * 100)
-    const severityText = severity === 'critical' ? 'CRITICAL' : severity === 'high' ? 'HIGH PRIORITY' : severity === 'medium' ? 'MODERATE' : 'LOW PRIORITY'
     
-    const summaries = {
-      fire: `🔥 FIRE INCIDENT DETECTED (${confidencePercent}% confidence) - ${severityText}: Fire/smoke reported. Immediate emergency response required. Fire department and medical teams should be dispatched.`,
-      flood: `🌊 FLOOD SITUATION IDENTIFIED (${confidencePercent}% confidence) - ${severityText}: Water-related emergency detected. Monitor water levels and evacuation routes. Rescue teams on standby.`,
-      outage: `⚡ POWER OUTAGE REPORTED (${confidencePercent}% confidence) - ${severityText}: Electrical system failure detected. Utility crews notified for restoration efforts. Backup power systems activated.`,
-      storm: `🌪️ SEVERE WEATHER DETECTED (${confidencePercent}% confidence) - ${severityText}: Storm activity reported. Weather service alerted. Prepare for potential evacuations and property damage.`,
-      shelter: `🏠 EMERGENCY SHELTER REQUEST (${confidencePercent}% confidence) - ${severityText}: Evacuation or housing assistance needed. Emergency management coordinating shelter resources and aid distribution.`
+    // Response urgency text that matches severity level
+    const responseTexts = {
+      critical: 'IMMEDIATE ACTION REQUIRED',
+      high: 'URGENT RESPONSE NEEDED', 
+      medium: 'TIMELY RESPONSE RECOMMENDED',
+      low: 'ROUTINE RESPONSE SUFFICIENT'
     }
     
-    return summaries[type]
+    // Action descriptions that match severity
+    const actionTexts = {
+      fire: {
+        critical: 'Immediate emergency response required. Fire department and medical teams must be dispatched NOW.',
+        high: 'Fire department response needed urgently. Medical standby recommended.',
+        medium: 'Fire department should respond promptly. Monitor situation closely.',
+        low: 'Fire department can respond routinely. No immediate danger expected.'
+      },
+      flood: {
+        critical: 'Emergency evacuation may be needed. Rescue teams must mobilize immediately.',
+        high: 'Monitor water levels urgently. Evacuation routes should be prepared.',
+        medium: 'Track water levels and prepare resources. Moderate flood risk.',
+        low: 'Monitor situation routinely. Low flood impact expected.'
+      },
+      outage: {
+        critical: 'Critical infrastructure affected. Emergency power restoration required.',
+        high: 'Significant service disruption. Prioritize restoration efforts.',
+        medium: 'Utility crews should respond promptly. Moderate service impact.',
+        low: 'Routine maintenance response. Minimal service disruption expected.'
+      },
+      storm: {
+        critical: 'Severe weather emergency. Immediate shelter and evacuation preparation.',
+        high: 'Dangerous weather conditions. Prepare for potential evacuations.',
+        medium: 'Monitor weather closely. Prepare resources as needed.',
+        low: 'Routine weather monitoring. Limited impact expected.'
+      },
+      shelter: {
+        critical: 'Emergency shelter needed immediately. Mass displacement event.',
+        high: 'Urgent housing assistance required. Multiple people affected.',
+        medium: 'Shelter resources should be coordinated. Moderate assistance needed.',
+        low: 'Routine assistance available. Limited shelter needs.'
+      }
+    }
+    
+    const severityLabel = severity === 'critical' ? 'CRITICAL' : severity === 'high' ? 'HIGH PRIORITY' : severity === 'medium' ? 'MODERATE PRIORITY' : 'LOW PRIORITY'
+    
+    const typeEmoji = {
+      fire: '🔥',
+      flood: '🌊', 
+      outage: '⚡',
+      storm: '🌪️',
+      shelter: '🏠'
+    }
+    
+    return `${typeEmoji[type]} ${type.toUpperCase()} INCIDENT (${confidencePercent}% confidence) - ${severityLabel}: ${actionTexts[type][severity]} ${responseTexts[severity]}.`
   }
   
   return {
@@ -293,5 +368,5 @@ export function generateAlertMessage(alert: Alert): string {
     critical: 'EMERGENCY'
   }
   
-  return `${typeEmojis[alert.type]} ${severityTexts[alert.severity]}: ${alert.description} - ${alert.location_text} (${Math.round(alert.confidence_score * 100)}% confidence)`
+  return `${typeEmojis[alert.type]} ${severityTexts[alert.severity]}: ${alert.description} - ${alert.location_text} (${Math.round((alert.confidence_score || 0) * 100)}% confidence)`
 }

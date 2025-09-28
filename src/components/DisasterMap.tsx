@@ -164,6 +164,13 @@ export const DisasterMap = ({
   filters = { fire: true, flood: true, outage: true, storm: true, shelter: true }
 }: DisasterMapProps) => {
   const [safeZoneLocation, setSafeZoneLocation] = useState<[number, number] | null>(null)
+  const [selectedSafeZone, setSelectedSafeZone] = useState<{
+    name: string
+    address: string
+    lat: number
+    lng: number
+    facilities: string[]
+  } | null>(null)
   const [nearbyEmergencies, setNearbyEmergencies] = useState<Alert[]>([])
   const mapRef = useRef<L.Map | null>(null)
 
@@ -277,17 +284,24 @@ export const DisasterMap = ({
 
   // Check for nearby emergencies when alerts or filters change
   useEffect(() => {
-    const filteredAlerts = alerts.filter(alert => filters[alert.type])
+    // Filter alerts by type AND ensure they have valid coordinates for calculations
+    const filteredAlertsWithCoords = alerts.filter(alert => 
+      filters[alert.type] && 
+      alert.location_lat != null && 
+      alert.location_lng != null && 
+      !isNaN(alert.location_lat) && 
+      !isNaN(alert.location_lng)
+    )
     
-    if (filteredAlerts.length > 0) {
+    if (filteredAlertsWithCoords.length > 0) {
       // Check for nearby emergencies (within 5km radius of Baltimore center)
       const baltimoreCenter = [39.2904, -76.6122]
       const nearbyRadius = 0.05 // roughly 5km in degrees
       
-      const nearby = filteredAlerts.filter(alert => {
+      const nearby = filteredAlertsWithCoords.filter(alert => {
         const distance = Math.sqrt(
-          Math.pow(alert.location_lat - baltimoreCenter[0], 2) + 
-          Math.pow(alert.location_lng - baltimoreCenter[1], 2)
+          Math.pow(alert.location_lat! - baltimoreCenter[0], 2) + 
+          Math.pow(alert.location_lng! - baltimoreCenter[1], 2)
         )
         return distance <= nearbyRadius && (alert.severity === 'critical' || alert.severity === 'high')
       })
@@ -298,7 +312,14 @@ export const DisasterMap = ({
     }
   }, [alerts, filters])
 
-  const filteredAlerts = alerts.filter(alert => filters[alert.type])
+  // Filter alerts by type AND ensure they have valid coordinates
+  const filteredAlerts = alerts.filter(alert => 
+    filters[alert.type] && 
+    alert.location_lat != null && 
+    alert.location_lng != null && 
+    !isNaN(alert.location_lat) && 
+    !isNaN(alert.location_lng)
+  )
 
   // Baltimore area center
   const defaultCenter: [number, number] = [39.2904, -76.6122]
@@ -310,11 +331,43 @@ export const DisasterMap = ({
         const userLat = position.coords.latitude
         const userLng = position.coords.longitude
         
-        // Mock safe zones (in real app, this would come from API)
+        // Enhanced safe zones with full addresses and facilities
         const safeZones = [
-          { name: 'Baltimore Convention Center', lat: 39.2860, lng: -76.6080 },
-          { name: 'M&T Bank Stadium', lat: 39.2780, lng: -76.6227 },
-          { name: 'Inner Harbor Emergency Center', lat: 39.2864, lng: -76.6099 },
+          { 
+            name: 'Baltimore Convention Center', 
+            address: '1 W Pratt St, Baltimore, MD 21201',
+            lat: 39.2860, 
+            lng: -76.6080,
+            facilities: ['Emergency Medical', 'Shelter', 'Food Service', 'Communications']
+          },
+          { 
+            name: 'M&T Bank Stadium', 
+            address: '1101 Russell St, Baltimore, MD 21230',
+            lat: 39.2780, 
+            lng: -76.6227,
+            facilities: ['Mass Shelter', 'Emergency Services', 'Security', 'First Aid']
+          },
+          { 
+            name: 'Baltimore City Hall', 
+            address: '100 Holliday St, Baltimore, MD 21202',
+            lat: 39.2903, 
+            lng: -76.6107,
+            facilities: ['Emergency Command Center', 'Communications', 'Coordination Hub']
+          },
+          {
+            name: 'Johns Hopkins Hospital',
+            address: '1800 Orleans St, Baltimore, MD 21287',
+            lat: 39.2970,
+            lng: -76.5929,
+            facilities: ['Full Medical Center', 'Trauma Care', 'Emergency Surgery', 'Pharmacy']
+          },
+          {
+            name: 'UMBC Campus Emergency Center',
+            address: '1000 Hilltop Cir, Baltimore, MD 21250',
+            lat: 39.2540,
+            lng: -76.7134,
+            facilities: ['Student Services', 'Campus Security', 'Emergency Shelter', 'Food Service']
+          }
         ]
         
         // Find nearest safe zone (simple distance calculation)
@@ -335,17 +388,25 @@ export const DisasterMap = ({
           }
         })
         
-        // Set the safe zone marker
+        // Set the safe zone marker and details
         setSafeZoneLocation([nearestZone.lat, nearestZone.lng])
+        setSelectedSafeZone(nearestZone)
         
         // Show notification
         const estimatedTime = Math.max(5, Math.round(minDistance * 1000)) // Mock time calculation
-        alert(`🚨 Nearest Safe Zone Found!\n\n📍 ${nearestZone.name}\n⏱️ Estimated arrival: ${estimatedTime} minutes\n\n✅ Safe zone marker added to map!`)
+        alert(`🚨 Nearest Safe Zone Found!\n\n📍 ${nearestZone.name}\n📋 ${nearestZone.address}\n⏱️ Estimated arrival: ${estimatedTime} minutes\n\n✅ Safe zone marker added to map - click it to copy the address!`)
       }, () => {
         // Fallback to default safe zone if location access denied
-        const defaultSafeZone: [number, number] = [39.2860, -76.6080] // Baltimore Convention Center
-        setSafeZoneLocation(defaultSafeZone)
-        alert(`🚨 Using Default Safe Zone\n\n📍 Baltimore Convention Center\n⏱️ Please enable location services for personalized routing\n\n✅ Safe zone marker added to map!`)
+        const defaultSafeZone = {
+          name: 'Baltimore Convention Center',
+          address: '1 W Pratt St, Baltimore, MD 21201',
+          lat: 39.2860,
+          lng: -76.6080,
+          facilities: ['Emergency Medical', 'Shelter', 'Food Service', 'Communications']
+        }
+        setSafeZoneLocation([defaultSafeZone.lat, defaultSafeZone.lng])
+        setSelectedSafeZone(defaultSafeZone)
+        alert(`🚨 Using Default Safe Zone\n\n📍 ${defaultSafeZone.name}\n📋 ${defaultSafeZone.address}\n⏱️ Please enable location services for personalized routing\n\n✅ Safe zone marker added to map - click it to copy the address!`)
       })
     } else {
       alert('❌ Geolocation not supported by this browser.')
@@ -361,7 +422,7 @@ export const DisasterMap = ({
             <div className="text-2xl animate-bounce">🚨</div>
             <div className="text-center">
               <div className="text-lg font-black uppercase tracking-wider">
-                ⚠️ {nearbyEmergencies.length} EMERGENCY{nearbyEmergencies.length > 1 ? 'IES' : ''} NEAR YOU ⚠️
+                ⚠️ {nearbyEmergencies.length} EMERGEN{nearbyEmergencies.length > 1 ? 'CIES' : 'CY'} NEAR YOU ⚠️
               </div>
               <div className="text-sm font-medium opacity-90">
                 {nearbyEmergencies.map(e => e.type.toUpperCase()).join(' • ')} - Take Immediate Action!
@@ -445,7 +506,7 @@ export const DisasterMap = ({
           return (
             <Marker
               key={alert.id}
-              position={[alert.location_lat, alert.location_lng]}
+              position={[alert.location_lat!, alert.location_lng!]}
               icon={customIcon}
               eventHandlers={{
                 click: (e) => {
@@ -499,7 +560,7 @@ export const DisasterMap = ({
                   <div className="text-xs text-gray-600 space-y-1 border-t pt-2">
                     <div className="flex items-center space-x-2">
                       <span>📍</span>
-                      <span>{alert.location_text}</span>
+                      <span>{alert.location_text || 'Location not specified'}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <span>⏱️</span>
@@ -507,11 +568,11 @@ export const DisasterMap = ({
                     </div>
                     <div className="flex items-center space-x-2">
                       <span>🎯</span>
-                      <span>{Math.round(alert.confidence_score * 100)}% confidence</span>
+                      <span>{Math.round((alert.confidence_score || 0) * 100)}% confidence</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <span>📊</span>
-                      <span>Source: {alert.source}</span>
+                      <span>Source: {alert.source || 'Unknown'}</span>
                     </div>
                   </div>
                 </div>
@@ -526,8 +587,10 @@ export const DisasterMap = ({
             report.status === 'approved' && 
             report.alert_type && 
             filters[report.alert_type] &&
-            report.location_lat && 
-            report.location_lng
+            report.location_lat != null && 
+            report.location_lng != null &&
+            !isNaN(report.location_lat) && 
+            !isNaN(report.location_lng)
           )
           .map((report) => {
             const customIcon = createColoredIcon(getDisasterColor(report.alert_type!), true, report.alert_type!)
@@ -539,7 +602,7 @@ export const DisasterMap = ({
             return (
               <Marker
                 key={`report-${report.id}`}
-                position={[report.location_lat, report.location_lng]}
+                position={[report.location_lat!, report.location_lng!]}
                 icon={customIcon}
                 eventHandlers={{
                   click: (e) => {
@@ -612,7 +675,7 @@ export const DisasterMap = ({
           })}
 
         {/* Safe Zone Marker */}
-        {safeZoneLocation && (() => {
+        {safeZoneLocation && selectedSafeZone && (() => {
           const safeZoneIcon = createSafeZoneIcon()
           if (!safeZoneIcon) {
             console.warn('Failed to create safe zone icon')
@@ -633,17 +696,88 @@ export const DisasterMap = ({
                 }
               }}
             >
-              <Popup maxWidth={250} minWidth={200}>
-                <div className="p-2 text-center">
-                  <div className="flex items-center justify-center space-x-2 mb-2">
+              <Popup maxWidth={300} minWidth={280}>
+                <div className="p-3">
+                  <div className="flex items-center justify-center space-x-2 mb-3">
                     <span className="text-2xl">🏥</span>
-                    <h3 className="font-bold text-green-700">Safe Zone</h3>
+                    <h3 className="font-bold text-green-700 text-lg">{selectedSafeZone.name}</h3>
                   </div>
-                  <p className="text-sm text-gray-700 mb-2">
-                    Emergency evacuation point with medical facilities and shelter.
-                  </p>
-                  <div className="text-xs text-green-600 font-medium">
-                    ✅ Safe to approach
+                  
+                  {/* Full Address Section */}
+                  <div className="bg-gray-50 rounded-lg p-3 mb-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-semibold text-gray-800 text-sm">📍 Full Address:</h4>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedSafeZone.address).then(() => {
+                            // Show temporary success message
+                            const button = document.activeElement as HTMLButtonElement
+                            if (button) {
+                              const originalText = button.textContent
+                              button.textContent = '✅ Copied!'
+                              button.className = 'px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 transition-colors'
+                              setTimeout(() => {
+                                button.textContent = originalText
+                                button.className = 'px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors'
+                              }, 2000)
+                            }
+                          }).catch(() => {
+                            alert('Failed to copy address. Please copy manually.')
+                          })
+                        }}
+                        className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                      >
+                        📋 Copy
+                      </button>
+                    </div>
+                    <p className="text-sm text-gray-700 font-medium leading-relaxed">
+                      {selectedSafeZone.address}
+                    </p>
+                  </div>
+
+                  {/* Facilities Section */}
+                  <div className="mb-3">
+                    <h4 className="font-semibold text-gray-800 text-sm mb-2">🏥 Available Services:</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedSafeZone.facilities.map((facility, index) => (
+                        <span 
+                          key={index}
+                          className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full"
+                        >
+                          {facility}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => {
+                        // Open in Google Maps
+                        const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(selectedSafeZone.address)}`
+                        window.open(googleMapsUrl, '_blank')
+                      }}
+                      className="flex-1 bg-blue-600 text-white text-xs py-2 px-3 rounded hover:bg-blue-700 transition-colors"
+                    >
+                      🗺️ Directions
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${selectedSafeZone.name}\n${selectedSafeZone.address}`).then(() => {
+                          alert('✅ Safe zone details copied to clipboard!')
+                        }).catch(() => {
+                          alert('Failed to copy. Please copy manually.')
+                        })
+                      }}
+                      className="flex-1 bg-green-600 text-white text-xs py-2 px-3 rounded hover:bg-green-700 transition-colors"
+                    >
+                      📋 Copy All
+                    </button>
+                  </div>
+                  
+                  <div className="text-xs text-green-600 font-medium text-center mt-2">
+                    ✅ Safe to approach - Emergency services available
                   </div>
                 </div>
               </Popup>
