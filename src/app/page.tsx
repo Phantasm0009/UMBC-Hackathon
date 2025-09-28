@@ -19,6 +19,23 @@ export default function DashboardPage() {
   // Use real-time data hook instead of manual data loading
   const { alerts, reports, isConnected, connectionError, reconnect, loading } = useRealtimeData()
   
+  // Debug logging for reports
+  useEffect(() => {
+    console.log('=== REPORTS DEBUG ===')
+    console.log('Total reports:', reports.length)
+    console.log('Approved reports:', reports.filter(r => r.status === 'approved').length)
+    console.log('Reports with alert_type:', reports.filter(r => r.alert_type).length)
+    console.log('Reports with coordinates:', reports.filter(r => r.location_lat && r.location_lng).length)
+    console.log('All reports:', reports.map(r => ({
+      id: r.id,
+      status: r.status,
+      alert_type: r.alert_type,
+      has_coords: !!(r.location_lat && r.location_lng),
+      text: r.text_report?.substring(0, 50) + '...'
+    })))
+    console.log('====================')
+  }, [reports])
+  
   const [filters, setFilters] = useState({
     fire: true,
     flood: true,
