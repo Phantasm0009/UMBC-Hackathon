@@ -12,6 +12,8 @@ export async function PUT(
     const { id } = await params
     const { status, severity } = await request.json()
     
+    console.log(`Updating report ${id}: status=${status}, severity=${severity}`)
+    
     if (!id || !status) {
       return NextResponse.json(
         { error: 'Missing report ID or status' },
@@ -40,12 +42,14 @@ export async function PUT(
       console.log(`Updated report ${id} status to ${status}${severity ? ` with severity ${severity}` : ''} in Supabase`)
       
       // Broadcast real-time event
+      console.log(`Broadcasting report-updated event for report ${id}`)
       broadcastEvent({
         type: 'report-updated',
         data: updatedReport as unknown as Record<string, unknown>,
         timestamp: new Date().toISOString()
       })
       
+      console.log(`Report ${id} successfully updated and broadcasted`)
       return NextResponse.json({ report: updatedReport })
     } catch (supabaseError) {
       console.log('Supabase not available, updating in temp store:', supabaseError)

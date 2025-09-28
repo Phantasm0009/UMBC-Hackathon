@@ -34,6 +34,27 @@ export default function AdminPage() {
     userLocation: null as { lat: number, lng: number } | null
   })
 
+  const createTestPendingReport = async () => {
+    try {
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text_report: "Test report for approval debugging - power outage on campus",
+          location_text: "UMBC Campus, Baltimore, MD",
+          location_lat: 39.2547,
+          location_lng: -76.7133
+        })
+      })
+      
+      if (response.ok) {
+        console.log('Test report created successfully')
+      }
+    } catch (error) {
+      console.error('Error creating test report:', error)
+    }
+  }
+
   const handleReportAction = async (reportId: string, action: 'approve' | 'reject') => {
     if (action === 'reject') {
       // For rejection, process immediately
@@ -68,7 +89,9 @@ export default function AdminPage() {
       try {
         const report = reports.find(r => r.id === reportId)
         if (report && report.text_report) {
+          console.log('Starting AI classification for report:', reportId)
           const classification = await classifyData(report.text_report, report.image_url || undefined)
+          console.log('AI classification result:', classification)
           setAiClassification({
             severity: classification.severity,
             confidence: classification.confidence,
@@ -110,8 +133,12 @@ export default function AdminPage() {
         // Close modal and reset classification
         setApprovingReport(null)
         setAiClassification(null)
+        
+        // Show success message
+        alert('✅ Report approved and will appear on dashboard!')
       } else {
-        console.error('Failed to update report status:', await response.text())
+        const errorText = await response.text()
+        console.error('Failed to update report status:', errorText)
         alert('Failed to update report status. Please try again.')
       }
     } catch (error) {
@@ -340,6 +367,12 @@ export default function AdminPage() {
           <div className="bg-white rounded-2xl border-2 border-gray-200 p-6 text-center">
             <div className="text-3xl font-bold text-yellow-600">{pendingReports.length}</div>
             <div className="text-sm text-gray-600 mt-1">Pending Reports</div>
+            <button
+              onClick={createTestPendingReport}
+              className="mt-2 px-3 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+            >
+              Add Test Report
+            </button>
           </div>
           <div className="bg-white rounded-2xl border-2 border-gray-200 p-6 text-center">
             <div className="text-3xl font-bold text-green-600">
@@ -428,7 +461,7 @@ export default function AdminPage() {
                               <button
                                 onClick={() => setApprovingReport(report.id)}
                                 className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200"
-                                title="Approve Report with Severity"
+                                title="Approve Report"
                               >
                                 <CheckCircle size={16} />
                               </button>
@@ -712,7 +745,7 @@ export default function AdminPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900">AI Classification & Approval</h3>
+              <h3 className="text-xl font-bold text-gray-900">Approve Report</h3>
               <button
                 onClick={() => {
                   setApprovingReport(null)
@@ -734,7 +767,7 @@ export default function AdminPage() {
                     <h4 className="font-semibold text-blue-900">AI-Powered Classification</h4>
                   </div>
                   <p className="text-blue-800 text-sm">
-                    Our AI will automatically analyze the report content and assign the appropriate severity level based on:
+                    Approving this report will make it visible on the public dashboard. AI will analyze the content and assign the appropriate severity level based on:
                   </p>
                   <ul className="text-blue-700 text-xs mt-2 space-y-1 ml-4">
                     <li>• Emergency keywords and urgency indicators</li>
@@ -799,9 +832,9 @@ export default function AdminPage() {
                 <button
                   onClick={() => handleReportAction(approvingReport, 'approve')}
                   disabled={classifying}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {classifying ? 'Analyzing...' : 'Analyze with AI'}
+                  {classifying ? 'Approving...' : 'Approve Report'}
                 </button>
               ) : (
                 <button
