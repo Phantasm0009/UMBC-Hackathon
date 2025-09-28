@@ -29,6 +29,18 @@ export const SummaryPanel = ({ alerts, reports = [], className = '' }: SummaryPa
   const criticalAlerts = activeAlerts.filter(alert => alert.severity === 'critical')
   const highPriorityAlerts = activeAlerts.filter(alert => ['critical', 'high'].includes(alert.severity))
 
+  // Get approved reports with severity
+  const approvedReports = reports.filter(report => report.status === 'approved')
+  const highPriorityReports = approvedReports.filter(report => 
+    report.severity && ['critical', 'high'].includes(report.severity)
+  )
+  const criticalReports = approvedReports.filter(report => report.severity === 'critical')
+
+  // Combined high priority incidents (alerts + reports)
+  const totalHighPriority = highPriorityAlerts.length + highPriorityReports.length
+  const totalCritical = criticalAlerts.length + criticalReports.length
+  const totalActive = activeAlerts.length + approvedReports.length
+
   // Count by type
   const alertCounts = activeAlerts.reduce((acc, alert) => {
     acc[alert.type] = (acc[alert.type] || 0) + 1
@@ -56,22 +68,29 @@ export const SummaryPanel = ({ alerts, reports = [], className = '' }: SummaryPa
         </div>
       </div>
 
-      {/* Critical Alerts */}
-      {criticalAlerts.length > 0 && (
+      {/* Critical Incidents (Alerts + Reports) */}
+      {totalCritical > 0 && (
         <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
           <div className="flex items-center space-x-2 mb-3">
             <AlertTriangle className="text-red-600" size={20} />
-            <h3 className="text-lg font-bold text-red-900">Critical Alerts ({criticalAlerts.length})</h3>
+            <h3 className="text-lg font-bold text-red-900">Critical Incidents ({totalCritical})</h3>
           </div>
           <div className="space-y-2">
-            {criticalAlerts.slice(0, 3).map((alert) => (
+            {/* Show critical alerts */}
+            {criticalAlerts.slice(0, 2).map((alert) => (
               <div key={alert.id} className="text-sm text-red-800">
-                {generateAlertMessage(alert)}
+                🚨 {generateAlertMessage(alert)}
               </div>
             ))}
-            {criticalAlerts.length > 3 && (
+            {/* Show critical reports */}
+            {criticalReports.slice(0, 2).map((report) => (
+              <div key={`report-${report.id}`} className="text-sm text-red-800">
+                👤 Critical citizen report: {report.alert_type} incident at {report.location_text}
+              </div>
+            ))}
+            {totalCritical > 4 && (
               <div className="text-xs text-red-600 font-medium">
-                +{criticalAlerts.length - 3} more critical alerts
+                +{totalCritical - 4} more critical incidents
               </div>
             )}
           </div>
@@ -81,12 +100,18 @@ export const SummaryPanel = ({ alerts, reports = [], className = '' }: SummaryPa
       {/* Statistics */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-gray-50 rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-gray-900">{activeAlerts.length}</div>
-          <div className="text-sm text-gray-600">Active Alerts</div>
+          <div className="text-2xl font-bold text-gray-900">{totalActive}</div>
+          <div className="text-sm text-gray-600">Active Incidents</div>
+          <div className="text-xs text-gray-500 mt-1">
+            {activeAlerts.length} alerts • {approvedReports.length} reports
+          </div>
         </div>
         <div className="bg-red-50 rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-red-600">{highPriorityAlerts.length}</div>
+          <div className="text-2xl font-bold text-red-600">{totalHighPriority}</div>
           <div className="text-sm text-red-600">High Priority</div>
+          <div className="text-xs text-red-500 mt-1">
+            {highPriorityAlerts.length} alerts • {highPriorityReports.length} reports
+          </div>
         </div>
       </div>
 

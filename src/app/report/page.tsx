@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { classifyData } from '@/lib/ai'
 import { DisasterIcon, Plus, MapPin } from '@/components/Icons'
+import { LocationAutocomplete } from '@/components/LocationAutocomplete'
 import Link from 'next/link'
 
 export default function ReportPage() {
@@ -181,10 +182,15 @@ export default function ReportPage() {
                 Location
               </label>
               <div className="flex space-x-2">
-                <input
-                  type="text"
+                <LocationAutocomplete
                   value={formData.location}
-                  onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
+                  onChange={(location, coordinates) => {
+                    setFormData(prev => ({ 
+                      ...prev, 
+                      location,
+                      userLocation: coordinates || prev.userLocation
+                    }))
+                  }}
                   placeholder="Street address, intersection, or landmark"
                   className="flex-1 p-4 border-2 border-gray-200 rounded-xl focus:border-red-600 focus:outline-none transition-colors duration-200"
                 />

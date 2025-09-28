@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { mockReports } from '@/lib/mockData'
 import { classifyData } from '@/lib/ai'
 import { supabaseHelpers } from '@/lib/supabase'
+import { tempReportStore } from '@/lib/tempReportStore'
 
 // GET /api/reports - Return reports from Supabase if available, otherwise mock data
 export async function GET() {
@@ -10,12 +11,20 @@ export async function GET() {
     try {
       const supabaseReports = await supabaseHelpers.fetchReports()
       console.log('Fetched reports from Supabase:', supabaseReports.length)
-      return NextResponse.json(supabaseReports)
+      
+      // Combine Supabase reports with temporary reports
+      const tempReports = tempReportStore.getReports()
+      const allReports = [...supabaseReports, ...tempReports]
+      
+      return NextResponse.json(allReports)
     } catch (supabaseError) {
-      console.log('Supabase not available, using mock data:', supabaseError)
-      // Fallback to mock data
+      console.log('Supabase not available, using mock + temp data:', supabaseError)
+      // Fallback to mock data + temporary reports
       await new Promise(resolve => setTimeout(resolve, 100))
-      return NextResponse.json(mockReports)
+      const tempReports = tempReportStore.getReports()
+      const allReports = [...mockReports, ...tempReports]
+      
+      return NextResponse.json(allReports)
     }
   } catch (error) {
     console.error('Error fetching reports:', error)
@@ -30,14 +39,36 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const reportData = await request.json()
-    const { text_report, image_url, location_lat, location_lng, location_text } = reportData
+    const { 
+      text_report, 
+      image_url, 
+      location_lat, 
+      location_lng, 
+      location_text,
+      alert_type,
+      admin_created = false,
+      pre_approved = false
+    } = reportData
 
-    // Use AI to classify the report
-    const classification = await classifyData(text_report, image_url)
+    // Use AI to classify the report (unless alert_type is provided for admin reports)
+    const classification = alert_type ? 
+      { type: alert_type, confidence: 1.0, severity: 'medium', summary: text_report } :
+      await classifyData(text_report, image_url)
+
+    // Get a default citizen user ID from the database or use a fixed UUID
+    let userId: string
+    
+    try {
+      // Try to get a real citizen user from the database
+      userId = await supabaseHelpers.getDefaultCitizenUserId()
+    } catch (userError) {
+      console.log('Could not fetch user, using default UUID:', userError)
+      userId = 'b8d2b5c0-1234-4567-8901-123456789abc' // Default fallback UUID
+    }
 
     // Create report object
     const newReportData = {
-      user_id: 'user_citizen', // In a real app, this would come from auth
+      user_id: userId,
       text_report,
       image_url,
       location_lat: location_lat || 39.2904,
@@ -45,7 +76,8 @@ export async function POST(request: NextRequest) {
       location_text: location_text || 'Baltimore, MD',
       alert_type: classification.type,
       confidence_score: classification.confidence,
-      status: 'pending' as const,
+      status: pre_approved ? 'approved' as const : 'pending' as const,
+      admin_created: admin_created || false,
     }
 
     // Try to insert into Supabase first
@@ -58,13 +90,17 @@ export async function POST(request: NextRequest) {
         classification
       }, { status: 201 })
     } catch (supabaseError) {
-      console.log('Supabase not available, returning mock report:', supabaseError)
-      // Fallback to mock response
+      console.log('Supabase not available, storing in temp and returning mock report:', supabaseError)
+      // Fallback to mock response and store in temp
       const mockReport = {
         id: `report_${Date.now()}`,
         ...newReportData,
         created_at: new Date().toISOString()
       }
+      
+      // Add to temporary store so it shows up in admin panel
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tempReportStore.addReport(mockReport as unknown as any)
       
       return NextResponse.json({
         report: mockReport,

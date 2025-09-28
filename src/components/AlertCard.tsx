@@ -30,9 +30,12 @@ export const AlertCard = ({ alert, onClick, className = '' }: AlertCardProps) =>
 
   return (
     <div
-      className={`${getDisasterBgClass(alert.type || 'outage')} border-2 rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${className}`}
+      className={`${getDisasterBgClass(alert.type || 'outage')} border-2 rounded-2xl p-4 cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] touch-manipulation ${className}`}
       onClick={onClick}
-      style={{ borderColor: getDisasterColor(alert.type || 'outage') }}
+      style={{ 
+        borderColor: getDisasterColor(alert.type || 'outage'),
+        minHeight: '120px'
+      }}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center space-x-2">

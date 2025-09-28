@@ -1,45 +1,83 @@
 'use client'
 
-import { Alert } from '@/lib/supabase'
-import { DisasterIcon } from './Icons'
-import { generateAlertMessage } from '@/lib/ai'
+import { Alert, Report } from '@/lib/supabase'
+import { AlertTriangle } from '@/components/Icons'
 
 interface EmergencyTickerProps {
   alerts: Alert[]
+  reports?: Report[]
   className?: string
 }
 
-export const EmergencyTicker = ({ alerts, className = '' }: EmergencyTickerProps) => {
-  // Filter to show only critical and high severity alerts
-  const urgentAlerts = alerts.filter(alert => 
-    alert.status === 'active' && ['critical', 'high'].includes(alert.severity)
-  )
+export const EmergencyTicker = ({ alerts, reports = [], className = '' }: EmergencyTickerProps) => {
+  // Combine alerts and approved reports into a single array of recent events
+  const allEvents = [
+    // Add active alerts
+    ...alerts
+      .filter(alert => alert.status === 'active')
+      .map(alert => ({
+        id: alert.id,
+        type: alert.type,
+        message: alert.description,
+        location: alert.location_text,
+        severity: alert.severity,
+        timestamp: new Date(alert.created_at),
+        source: 'alert' as const
+      })),
+    
+    // Add approved reports
+    ...reports
+      .filter(report => report.status === 'approved' && report.alert_type)
+      .map(report => ({
+        id: report.id,
+        type: report.alert_type!,
+        message: report.text_report,
+        location: report.location_text,
+        severity: report.severity || 'medium',
+        timestamp: new Date(report.created_at),
+        source: 'report' as const,
+        admin_created: report.admin_created || false
+      }))
+  ]
 
-  if (urgentAlerts.length === 0) {
-    return null
+  // Sort by timestamp (most recent first) and take top 3
+  const recentEvents = allEvents
+    .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    .slice(0, 3)
+
+  if (recentEvents.length === 0) {
+    return (
+      <div className={`bg-green-50 border-b-2 border-green-200 px-4 py-2 ${className}`}>
+        <div className="flex items-center justify-center text-green-700">
+          <span className="text-sm font-medium">✅ No active emergencies at this time</span>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className={`bg-red-600 text-white py-2 overflow-hidden ${className}`}>
-      <div className="relative">
-        <div className="flex items-center">
-          <div className="bg-white text-red-600 px-3 py-1 font-bold text-sm rounded-r-lg mr-4 flex-shrink-0">
-            🚨 EMERGENCY ALERTS
-          </div>
+    <div className={`bg-red-600 border-b-2 border-red-700 px-4 py-2 overflow-hidden ${className}`}>
+      <div className="flex items-center space-x-2">
+        <AlertTriangle className="text-white animate-pulse flex-shrink-0" size={16} />
+        <div className="text-white text-sm font-medium uppercase tracking-wide">
+          EMERGENCY ALERTS
+        </div>
+        <div className="flex-1 overflow-hidden">
           <div className="animate-scroll-left whitespace-nowrap">
-            {urgentAlerts.map((alert, index) => (
-              <span key={alert.id} className="inline-flex items-center mr-8">
-                <DisasterIcon 
-                  type={alert.type} 
-                  className="mr-2 flex-shrink-0" 
-                  size={16} 
-                />
-                <span className="text-sm font-medium">
-                  {generateAlertMessage(alert)}
+            {recentEvents.map((event, index) => (
+              <span key={event.id} className="text-white">
+                {index > 0 && ' • '}
+                <span className="font-semibold uppercase">{event.type}</span>
+                {' '}
+                <span className="capitalize">{event.severity}</span>
+                {' - '}
+                {event.message?.slice(0, 100)}
+                {event.message && event.message.length > 100 && '...'}
+                {' '}
+                <span className="text-red-200">
+                  ({event.location}) {event.source === 'report' && event.admin_created && '[ADMIN]'}
+                  {event.source === 'report' && !event.admin_created && '[CITIZEN]'}
                 </span>
-                {index < urgentAlerts.length - 1 && (
-                  <span className="mx-4 text-red-300">•</span>
-                )}
               </span>
             ))}
           </div>

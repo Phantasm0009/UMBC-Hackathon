@@ -11,10 +11,11 @@ DisasterLens is a comprehensive full-stack web application designed for real-tim
 ### 🎯 Core Functionality
 - **Real-time Emergency Dashboard** - Interactive map with live disaster alerts
 - **AI-Powered Classification** - Automatic categorization and confidence scoring
-- **Citizen Reporting Portal** - Easy-to-use interface for emergency submissions
+- **Citizen Reporting Portal** - Easy-to-use interface with location autocomplete
 - **Admin Management Panel** - Review and approve citizen reports
 - **Multi-level Alert System** - Critical, High, Medium, and Low priority levels
 - **Mobile-First Design** - Responsive interface optimized for all devices
+- **Free Location Search** - OpenStreetMap-powered address autocomplete
 
 ### 🎨 Standout UI Features
 - **Bold Red & White Color Scheme** - High contrast, emergency-focused design
@@ -36,6 +37,7 @@ DisasterLens is a comprehensive full-stack web application designed for real-tim
 - **Styling:** TailwindCSS with custom theme
 - **Database:** Supabase (PostgreSQL)
 - **Maps:** Leaflet.js / React-Leaflet
+- **Location Search:** OpenStreetMap Nominatim API (100% Free)
 - **Icons:** Lucide React
 - **AI:** Placeholder functions for Gemini API integration
 - **Deployment:** Vercel-ready configuration

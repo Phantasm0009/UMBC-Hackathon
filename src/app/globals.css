@@ -105,6 +105,24 @@ body {
 .leaflet-container {
   background: #f8fafc;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  height: 100% !important;
+  width: 100% !important;
+  z-index: 1;
+}
+
+/* Ensure map container has proper dimensions */
+.leaflet-container .leaflet-map-pane {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* Force map to render properly */
+.leaflet-container .leaflet-tile-pane {
+  opacity: 1 !important;
+}
+
+.leaflet-container .leaflet-layer {
+  opacity: 1 !important;
 }
 
 .leaflet-popup-content-wrapper {
@@ -132,6 +150,91 @@ body {
   backdrop-filter: blur(4px);
 }
 
+/* Ensure map overlay panels are always visible */
+.leaflet-control-container {
+  pointer-events: auto !important;
+}
+
+/* Emergency Mode Animations */
+@keyframes emergency-pulse {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  50% { 
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+}
+
+@keyframes emergency-flash {
+  0%, 50%, 100% { opacity: 1; }
+  25%, 75% { opacity: 0.3; }
+}
+
+@keyframes emergency-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
+
+@keyframes emergency-slide-in {
+  0% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-emergency-pulse {
+  animation: emergency-pulse 2s infinite;
+}
+
+.animate-emergency-flash {
+  animation: emergency-flash 1.5s infinite;
+}
+
+.animate-emergency-shake {
+  animation: emergency-shake 0.5s ease-in-out;
+}
+
+.animate-emergency-slide-in {
+  animation: emergency-slide-in 0.5s ease-out;
+}
+
+/* Emergency Mode Backdrop Blur */
+.emergency-backdrop {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.leaflet-container ~ div[class*="absolute"] {
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+}
+
+/* Override any Leaflet z-index issues */
+.leaflet-control-container {
+  z-index: 999 !important;
+}
+
+/* Custom disaster map markers */
+.custom-marker {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.custom-marker > div {
+  transition: transform 0.2s ease-in-out;
+}
+
+.custom-marker:hover > div {
+  transform: scale(1.1);
+}
+
 /* Fix for missing map tiles */
 .leaflet-tile-container img {
   max-width: none !important;
@@ -148,21 +251,131 @@ body {
     opacity: 1;
   }
   50% {
-    transform: scale(1.1);
-    opacity: 0.8;
+    transform: scale(1.3);
+    opacity: 0.7;
   }
 }
 
-.custom-marker {
-  border-radius: 50%;
+.emergency-sign-marker {
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
   color: white;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  box-shadow: 0 15px 35px -5px rgb(0 0 0 / 0.3), 0 8px 15px -8px rgb(0 0 0 / 0.2);
+  z-index: 1000 !important;
+  position: absolute !important;
+  transform-origin: center center !important;
+}
+
+.emergency-shelter-marker {
+  border-radius: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: white;
+  box-shadow: 0 20px 40px -10px rgb(0 0 0 / 0.4), 0 10px 20px -10px rgb(0 0 0 / 0.3);
+  z-index: 1001 !important;
+  position: absolute !important;
+  transform-origin: center center !important;
+}
+
+/* Fix marker positioning during zoom and pan operations */
+.leaflet-marker-icon.emergency-sign-marker,
+.leaflet-marker-icon.emergency-shelter-marker {
+  will-change: transform !important;
+  backface-visibility: hidden !important;
+  transform-style: preserve-3d !important;
+}
+
+/* Smooth transitions for marker interactions but not during zoom */
+.emergency-sign-marker:hover,
+.emergency-shelter-marker:hover {
+  transition: transform 0.2s ease !important;
 }
 
 .critical-marker {
-  animation: marker-pulse 2s ease-in-out infinite;
+  animation: marker-pulse 2s infinite;
+}
+
+/* Enhanced emergency marker visibility */
+.emergency-sign-marker:hover {
+  transform: scale(1.1) !important;
+  z-index: 2000 !important;
+}
+
+.emergency-shelter-marker:hover {
+  transform: scale(1.1) !important;
+  z-index: 2001 !important;
+}
+
+/* Text truncation utilities */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  /* Prevent zoom on input focus */
+  input, select, textarea {
+    font-size: 16px;
+  }
+  
+  /* Improve touch targets */
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Optimize scrolling on mobile */
+  body {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  
+  /* Prevent horizontal scroll */
+  html, body {
+    overflow-x: hidden;
+  }
+  
+  /* Better mobile modal styling */
+  .mobile-modal {
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+}
+
+/* Safe area support for iPhone */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .h-safe-area-inset-bottom {
+    height: env(safe-area-inset-bottom);
+  }
+  
+  .pb-safe-area {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
 }

@@ -43,23 +43,26 @@ export const MobileNavigation = () => {
   ]
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-200 md:hidden">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 md:hidden shadow-lg z-30">
       <div className="flex">
         {navItems.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
             href={href}
-            className={`flex-1 flex flex-col items-center py-3 text-xs font-medium transition-colors duration-200 ${
+            className={`flex-1 flex flex-col items-center py-4 px-2 text-xs font-medium transition-colors duration-200 active:bg-gray-100 ${
               pathname === href
                 ? 'text-red-600 bg-red-50'
-                : 'text-gray-600'
+                : 'text-gray-600 hover:text-gray-900'
             }`}
+            style={{ minHeight: '60px' }}
           >
-            <Icon size={20} />
-            <span className="mt-1">{label}</span>
+            <Icon size={24} className="mb-1" />
+            <span className="text-center leading-tight">{label}</span>
           </Link>
         ))}
       </div>
+      {/* Safe area for iPhone home indicator */}
+      <div className="h-safe-area-inset-bottom bg-white"></div>
     </div>
   )
 }
