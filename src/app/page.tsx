@@ -420,7 +420,9 @@ export default function DashboardPage() {
               <div className="flex items-start justify-between py-2 border-b border-gray-100">
                 <span className="font-semibold text-gray-900">Coordinates:</span>
                 <span className="text-gray-700 text-right flex-1 ml-2 font-mono text-xs">
-                  {selectedAlert.location_lat.toFixed(4)}, {selectedAlert.location_lng.toFixed(4)}
+                  {selectedAlert.location_lat != null && selectedAlert.location_lng != null
+                    ? `${selectedAlert.location_lat.toFixed(4)}, ${selectedAlert.location_lng.toFixed(4)}`
+                    : 'Location not specified'}
                 </span>
               </div>
               <div className="flex items-start justify-between py-2">
